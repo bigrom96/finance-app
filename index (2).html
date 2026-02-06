@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1e40af">
+    <title>💰 Мои Финансы</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * {
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+        }
+        
+        body {
+            overscroll-behavior: none;
+            -webkit-font-smoothing: antialiased;
+            background: #f8fafc;
+        }
+        
+        input, select, textarea {
+            -webkit-appearance: none;
+            appearance: none;
+        }
+        
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            max-width: 500px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 12px 8px;
+            font-weight: 600;
+            transition: all 0.2s;
+            font-size: 13px;
+        }
+
+        .tab-button.active {
+            color: #1e40af;
+            border-bottom: 3px solid #1e40af;
+        }
+
+        .account-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 16px;
+            padding: 16px;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .transaction-card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            transition: all 0.2s;
+        }
+
+        .transaction-card:active {
+            transform: scale(0.98);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 14px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            transition: all 0.2s;
+            box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-primary:active {
+            transform: scale(0.95);
+        }
+
+        .btn-income {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-expense {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            box-shadow: 0 4px 6px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-transfer {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            box-shadow: 0 4px 6px rgba(245, 158, 11, 0.3);
+        }
+
+        .category-item {
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 8px;
+            transition: all 0.2s;
+        }
+
+        .category-item.selected {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // Начальные категории
+        const INITIAL_CATEGORIES = [
+            {
+                id: 'products',
+                name: 'Продукты',
+                icon: '🍔',
+                type: 'expense',
+                subcategories: [
+                    { id: 'drinks', name: 'Напитки', icon: '🥤' },
+                    { id: 'sweets', name: 'Сладкое', icon: '🍬' },
+                    { id: 'fruits', name: 'Фрукты', icon: '🍎' },
+                    { id: 'vegetables', name: 'Овощи', icon: '🥬' },
+                    { id: 'other', name: 'Другое', icon: '🍞' }
+                ]
+            },
+            {
+                id: 'transport',
+                name: 'Транспорт',
+                icon: '🚗',
+                type: 'expense',
+                subcategories: [
+                    { id: 'taxi', name: 'Такси', icon: '🚕' },
+                    { id: 'metro', name: 'Метро', icon: '🚇' },
+                    { id: 'bus', name: 'Автобус', icon: '🚌' }
+                ]
+            },
+            {
+                id: 'utilities',
+                name: 'Коммунальные',
+                icon: '🏠',
+                type: 'expense',
+                subcategories: [
+                    { id: 'water', name: 'Вода', icon: '💧' },
+                    { id: 'electricity', name: 'Свет', icon: '⚡' },
+                    { id: 'gas', name: 'Газ', icon: '🔥' },
+                    { id: 'trash', name: 'Вывоз мусора', icon: '🗑️' }
+                ]
+            },
+            {
+                id: 'communication',
+                name: 'Связь',
+                icon: '📱',
+                type: 'expense',
+                subcategories: [
+                    { id: 'mobile', name: 'Мобильная связь', icon: '📱' },
+                    { id: 'internet', name: 'Интернет', icon: '🌐' }
+                ]
+            },
+            {
+                id: 'clothing',
+                name: 'Одежда',
+                icon: '👕',
+                type: 'expense',
+                subcategories: [
+                    { id: 'clothes', name: 'Одежда', icon: '👕' },
+                    { id: 'shoes', name: 'Обувь', icon: '👟' },
+                    { id: 'accessories', name: 'Аксессуары', icon: '👜' }
+                ]
+            },
+            {
+                id: 'income',
+                name: 'Доход',
+                icon: '💼',
+                type: 'income',
+                subcategories: [
+                    { id: 'salary', name: 'Зарплата', icon: '💰' },
+                    { id: 'bonus', name: 'Премия', icon: '🎁' },
+                    { id: 'freelance', name: 'Подработка', icon: '💻' },
+                    { id: 'other_income', name: 'Другое', icon: '💵' }
+                ]
+            }
+        ];
+
+        // Начальные счета
+        const INITIAL_ACCOUNTS = [
+            { id: 'cash', name: 'Наличные', icon: '💵', balance: 0, color: '#10b981' },
+            { id: 'kaspi', name: 'Kaspi Bank', icon: '🔵', balance: 0, color: '#3b82f6' },
+            { id: 'bcc', name: 'БЦК', icon: '🟢', balance: 0, color: '#10b981' },
+            { id: 'halyk', name: 'Халык Банк', icon: '🔴', balance: 0, color: '#ef4444' },
+            { id: 'card1', name: 'Карта 1', icon: '💳', balance: 0, color: '#8b5cf6' }
+        ];
+
+        function App() {
+            const [activeTab, setActiveTab] = useState('home');
+            const [categories, setCategories] = useState([]);
+            const [accounts, setAccounts] = useState([]);
+            const [transactions, setTransactions] = useState([]);
+            
+            // Модальные окна
+            const [showAddTransaction, setShowAddTransaction] = useState(false);
+            const [transactionType, setTransactionType] = useState('expense'); // income, expense, transfer
+            const [showCategoryManager, setShowCategoryManager] = useState(false);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [filterCategory, setFilterCategory] = useState('all');
+            const [filterAccount, setFilterAccount] = useState('all');
+            const [filterMonth, setFilterMonth] = useState('current');
+
+            // Форма транзакции
+            const [txForm, setTxForm] = useState({
+                amount: '',
+                category: '',
+                subcategory: '',
+                account: '',
+                toAccount: '',
+                note: '',
+                date: new Date().toISOString().split('T')[0]
+            });
+
+            // Загрузка данных
+            useEffect(() => {
+                const savedCategories = localStorage.getItem('financeApp_categories');
+                const savedAccounts = localStorage.getItem('financeApp_accounts');
+                const savedTransactions = localStorage.getItem('financeApp_transactions');
+                
+                setCategories(savedCategories ? JSON.parse(savedCategories) : INITIAL_CATEGORIES);
+                setAccounts(savedAccounts ? JSON.parse(savedAccounts) : INITIAL_ACCOUNTS);
+                setTransactions(savedTransactions ? JSON.parse(savedTransactions) : []);
+            }, []);
+
+            // Сохранение данных
+            useEffect(() => {
+                if (categories.length > 0) {
+                    localStorage.setItem('financeApp_categories', JSON.stringify(categories));
+                }
+            }, [categories]);
+
+            useEffect(() => {
+                if (accounts.length > 0) {
+                    localStorage.setItem('financeApp_accounts', JSON.stringify(accounts));
+                }
+            }, [accounts]);
+
+            useEffect(() => {
+                localStorage.setItem('financeApp_transactions', JSON.stringify(transactions));
+            }, [transactions]);
+
+            // Добавление транзакции
+            const addTransaction = () => {
+                if (!txForm.amount || parseFloat(txForm.amount) <= 0) {
+                    alert('Укажите сумму');
+                    return;
+                }
+
+                if (transactionType !== 'transfer' && !txForm.category) {
+                    alert('Выберите категорию');
+                    return;
+                }
+
+                if (!txForm.account) {
+                    alert('Выберите счёт');
+                    return;
+                }
+
+                if (transactionType === 'transfer' && !txForm.toAccount) {
+                    alert('Выберите счёт получателя');
+                    return;
+                }
+
+                if (transactionType === 'transfer' && txForm.account === txForm.toAccount) {
+                    alert('Выберите разные счета');
+                    return;
+                }
+
+                const amount = parseFloat(txForm.amount);
+                
+                // Создаём транзакцию
+                const transaction = {
+                    id: Date.now(),
+                    type: transactionType,
+                    amount,
+                    category: txForm.category,
+                    subcategory: txForm.subcategory,
+                    account: txForm.account,
+                    toAccount: txForm.toAccount,
+                    note: txForm.note,
+                    date: txForm.date,
+                    timestamp: new Date().toISOString()
+                };
+
+                // Обновляем балансы
+                setAccounts(prev => prev.map(acc => {
+                    if (transactionType === 'income' && acc.id === txForm.account) {
+                        return { ...acc, balance: acc.balance + amount };
+                    }
+                    if (transactionType === 'expense' && acc.id === txForm.account) {
+                        return { ...acc, balance: acc.balance - amount };
+                    }
+                    if (transactionType === 'transfer') {
+                        if (acc.id === txForm.account) {
+                            return { ...acc, balance: acc.balance - amount };
+                        }
+                        if (acc.id === txForm.toAccount) {
+                            return { ...acc, balance: acc.balance + amount };
+                        }
+                    }
+                    return acc;
+                }));
+
+                setTransactions(prev => [transaction, ...prev]);
+                setShowAddTransaction(false);
+                setTxForm({
+                    amount: '',
+                    category: '',
+                    subcategory: '',
+                    account: '',
+                    toAccount: '',
+                    note: '',
+                    date: new Date().toISOString().split('T')[0]
+                });
+            };
+
+            // Расчёты
+            const calculations = useMemo(() => {
+                const totalBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0);
+                
+                const currentMonth = new Date().getMonth();
+                const currentYear = new Date().getFullYear();
+                
+                const monthTransactions = transactions.filter(tx => {
+                    const txDate = new Date(tx.date);
+                    return txDate.getMonth() === currentMonth && txDate.getFullYear() === currentYear;
+                });
+
+                const monthIncome = monthTransactions
+                    .filter(tx => tx.type === 'income')
+                    .reduce((sum, tx) => sum + tx.amount, 0);
+
+                const monthExpenses = monthTransactions
+                    .filter(tx => tx.type === 'expense')
+                    .reduce((sum, tx) => sum + tx.amount, 0);
+
+                // Расходы по категориям
+                const expensesByCategory = {};
+                monthTransactions
+                    .filter(tx => tx.type === 'expense')
+                    .forEach(tx => {
+                        const cat = categories.find(c => c.id === tx.category);
+                        if (cat) {
+                            if (!expensesByCategory[cat.name]) {
+                                expensesByCategory[cat.name] = { amount: 0, icon: cat.icon };
+                            }
+                            expensesByCategory[cat.name].amount += tx.amount;
+                        }
+                    });
+
+                return {
+                    totalBalance,
+                    monthIncome,
+                    monthExpenses,
+                    monthBalance: monthIncome - monthExpenses,
+                    expensesByCategory
+                };
+            }, [accounts, transactions, categories]);
+
+            // Фильтрация транзакций
+            const filteredTransactions = useMemo(() => {
+                let result = [...transactions];
+
+                // Поиск
+                if (searchQuery) {
+                    result = result.filter(tx => 
+                        tx.note?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        accounts.find(a => a.id === tx.account)?.name.toLowerCase().includes(searchQuery.toLowerCase())
+                    );
+                }
+
+                // Категория
+                if (filterCategory !== 'all') {
+                    result = result.filter(tx => tx.category === filterCategory);
+                }
+
+                // Счёт
+                if (filterAccount !== 'all') {
+                    result = result.filter(tx => tx.account === filterAccount || tx.toAccount === filterAccount);
+                }
+
+                // Месяц
+                if (filterMonth === 'current') {
+                    const currentMonth = new Date().getMonth();
+                    const currentYear = new Date().getFullYear();
+                    result = result.filter(tx => {
+                        const txDate = new Date(tx.date);
+                        return txDate.getMonth() === currentMonth && txDate.getFullYear() === currentYear;
+                    });
+                }
+
+                return result;
+            }, [transactions, searchQuery, filterCategory, filterAccount, filterMonth, accounts]);
+
+            // Группировка по датам
+            const groupedTransactions = useMemo(() => {
+                const groups = {};
+                filteredTransactions.forEach(tx => {
+                    const date = new Date(tx.date).toLocaleDateString('ru-RU', {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric'
+                    });
+                    if (!groups[date]) {
+                        groups[date] = [];
+                    }
+                    groups[date].push(tx);
+                });
+                return groups;
+            }, [filteredTransactions]);
+
+            // Компоненты
+            const TransactionModal = () => {
+                const selectedCategory = categories.find(c => c.id === txForm.category);
+
+                return (
+                    <div className="modal-overlay" onClick={() => setShowAddTransaction(false)}>
+                        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                            <div className="p-6">
+                                <h2 className="text-2xl font-bold mb-4">
+                                    {transactionType === 'income' ? '💰 Доход' : 
+                                     transactionType === 'expense' ? '💸 Расход' : '🔄 Перевод'}
+                                </h2>
+
+                                <div className="space-y-4">
+                                    {/* Сумма */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Сумма (₸)</label>
+                                        <input
+                                            type="number"
+                                            value={txForm.amount}
+                                            onChange={(e) => setTxForm({...txForm, amount: e.target.value})}
+                                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-lg font-semibold focus:border-blue-500 focus:outline-none"
+                                            placeholder="0"
+                                        />
+                                    </div>
+
+                                    {/* Категория */}
+                                    {transactionType !== 'transfer' && (
+                                        <>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">Категория</label>
+                                                <select
+                                                    value={txForm.category}
+                                                    onChange={(e) => setTxForm({...txForm, category: e.target.value, subcategory: ''})}
+                                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none"
+                                                >
+                                                    <option value="">Выберите категорию</option>
+                                                    {categories
+                                                        .filter(c => c.type === transactionType)
+                                                        .map(cat => (
+                                                            <option key={cat.id} value={cat.id}>
+                                                                {cat.icon} {cat.name}
+                                                            </option>
+                                                        ))}
+                                                </select>
+                                            </div>
+
+                                            {/* Подкатегория */}
+                                            {selectedCategory?.subcategories && (
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-2">Подкатегория</label>
+                                                    <select
+                                                        value={txForm.subcategory}
+                                                        onChange={(e) => setTxForm({...txForm, subcategory: e.target.value})}
+                                                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none"
+                                                    >
+                                                        <option value="">Не указана</option>
+                                                        {selectedCategory.subcategories.map(sub => (
+                                                            <option key={sub.id} value={sub.id}>
+                                                                {sub.icon} {sub.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+
+                                    {/* Счёт */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            {transactionType === 'transfer' ? 'Откуда' : 'Счёт'}
+                                        </label>
+                                        <select
+                                            value={txForm.account}
+                                            onChange={(e) => setTxForm({...txForm, account: e.target.value})}
+                                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none"
+                                        >
+                                            <option value="">Выберите счёт</option>
+                                            {accounts.map(acc => (
+                                                <option key={acc.id} value={acc.id}>
+                                                    {acc.icon} {acc.name} ({acc.balance.toLocaleString()}₸)
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Счёт получателя (для перевода) */}
+                                    {transactionType === 'transfer' && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Куда</label>
+                                            <select
+                                                value={txForm.toAccount}
+                                                onChange={(e) => setTxForm({...txForm, toAccount: e.target.value})}
+                                                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none"
+                                            >
+                                                <option value="">Выберите счёт</option>
+                                                {accounts.filter(a => a.id !== txForm.account).map(acc => (
+                                                    <option key={acc.id} value={acc.id}>
+                                                        {acc.icon} {acc.name} ({acc.balance.toLocaleString()}₸)
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {/* Дата */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Дата</label>
+                                        <input
+                                            type="date"
+                                            value={txForm.date}
+                                            onChange={(e) => setTxForm({...txForm, date: e.target.value})}
+                                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none"
+                                        />
+                                    </div>
+
+                                    {/* Заметка */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Заметка (опционально)</label>
+                                        <textarea
+                                            value={txForm.note}
+                                            onChange={(e) => setTxForm({...txForm, note: e.target.value})}
+                                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none resize-none"
+                                            rows="3"
+                                            placeholder="Например: Купил в Магнуме"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 mt-6">
+                                    <button
+                                        onClick={addTransaction}
+                                        className="flex-1 btn-primary"
+                                    >
+                                        Добавить
+                                    </button>
+                                    <button
+                                        onClick={() => setShowAddTransaction(false)}
+                                        className="flex-1 bg-gray-200 text-gray-700 py-3 px-6 rounded-xl font-semibold"
+                                    >
+                                        Отмена
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const HomeTab = () => (
+                <div className="p-4 pb-32">
+                    {/* Общий баланс */}
+                    <div className="account-card mb-6">
+                        <p className="text-sm opacity-90 mb-1">Общий баланс</p>
+                        <p className="text-4xl font-bold">{calculations.totalBalance.toLocaleString()} ₸</p>
+                    </div>
+
+                    {/* Месячная статистика */}
+                    <div className="bg-white rounded-xl p-4 mb-6 shadow-sm">
+                        <h3 className="font-semibold text-gray-700 mb-3">Этот месяц</h3>
+                        <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-600">💰 Доходы</span>
+                                <span className="font-semibold text-green-600">+{calculations.monthIncome.toLocaleString()} ₸</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-600">💸 Расходы</span>
+                                <span className="font-semibold text-red-600">-{calculations.monthExpenses.toLocaleString()} ₸</span>
+                            </div>
+                            <div className="border-t pt-2 mt-2">
+                                <div className="flex justify-between items-center">
+                                    <span className="font-semibold text-gray-700">Баланс</span>
+                                    <span className={`font-bold text-lg ${calculations.monthBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {calculations.monthBalance >= 0 ? '+' : ''}{calculations.monthBalance.toLocaleString()} ₸
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Счета */}
+                    <h3 className="font-bold text-lg mb-3 text-gray-800">Мои счета</h3>
+                    <div className="space-y-3 mb-6">
+                        {accounts.map(acc => (
+                            <div key={acc.id} className="bg-white rounded-xl p-4 shadow-sm flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="text-3xl">{acc.icon}</div>
+                                    <div>
+                                        <p className="font-semibold text-gray-800">{acc.name}</p>
+                                    </div>
+                                </div>
+                                <p className="font-bold text-lg" style={{color: acc.color}}>
+                                    {acc.balance.toLocaleString()} ₸
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Кнопки действий */}
+                    <div className="grid grid-cols-3 gap-3 mb-6">
+                        <button
+                            onClick={() => {
+                                setTransactionType('income');
+                                setShowAddTransaction(true);
+                            }}
+                            className="btn-primary btn-income text-sm py-4"
+                        >
+                            <div>➕</div>
+                            <div className="mt-1">Доход</div>
+                        </button>
+                        <button
+                            onClick={() => {
+                                setTransactionType('expense');
+                                setShowAddTransaction(true);
+                            }}
+                            className="btn-primary btn-expense text-sm py-4"
+                        >
+                            <div>➖</div>
+                            <div className="mt-1">Расход</div>
+                        </button>
+                        <button
+                            onClick={() => {
+                                setTransactionType('transfer');
+                                setShowAddTransaction(true);
+                            }}
+                            className="btn-primary btn-transfer text-sm py-4"
+                        >
+                            <div>🔄</div>
+                            <div className="mt-1">Перевод</div>
+                        </button>
+                    </div>
+
+                    {/* Последние операции */}
+                    <h3 className="font-bold text-lg mb-3 text-gray-800">Последние операции</h3>
+                    {transactions.slice(0, 5).map(tx => {
+                        const cat = categories.find(c => c.id === tx.category);
+                        const subcat = cat?.subcategories?.find(s => s.id === tx.subcategory);
+                        const acc = accounts.find(a => a.id === tx.account);
+                        const toAcc = accounts.find(a => a.id === tx.toAccount);
+
+                        return (
+                            <div key={tx.id} className="transaction-card">
+                                <div className="flex items-start justify-between">
+                                    <div className="flex items-start gap-3 flex-1">
+                                        <div className="text-2xl">
+                                            {tx.type === 'transfer' ? '🔄' : cat?.icon || '💰'}
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="font-semibold text-gray-800">
+                                                {tx.type === 'transfer' ? 
+                                                    `${acc?.name} → ${toAcc?.name}` :
+                                                    `${cat?.name}${subcat ? ` → ${subcat.name}` : ''}`
+                                                }
+                                            </p>
+                                            {tx.note && <p className="text-sm text-gray-500 mt-1">"{tx.note}"</p>}
+                                            <p className="text-xs text-gray-400 mt-1">
+                                                {new Date(tx.date).toLocaleDateString('ru-RU')} • {acc?.name}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className={`font-bold text-lg ${tx.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                                        {tx.type === 'income' ? '+' : '-'}{tx.amount.toLocaleString()} ₸
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            );
+
+            const HistoryTab = () => (
+                <div className="p-4 pb-32">
+                    {/* Поиск */}
+                    <input
+                        type="text"
+                        placeholder="🔍 Поиск..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl mb-4 focus:border-blue-500 focus:outline-none"
+                    />
+
+                    {/* Фильтры */}
+                    <div className="grid grid-cols-3 gap-2 mb-4">
+                        <select
+                            value={filterCategory}
+                            onChange={(e) => setFilterCategory(e.target.value)}
+                            className="px-3 py-2 border-2 border-gray-200 rounded-xl text-sm focus:border-blue-500 focus:outline-none"
+                        >
+                            <option value="all">Все категории</option>
+                            {categories.map(cat => (
+                                <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                            ))}
+                        </select>
+
+                        <select
+                            value={filterAccount}
+                            onChange={(e) => setFilterAccount(e.target.value)}
+                            className="px-3 py-2 border-2 border-gray-200 rounded-xl text-sm focus:border-blue-500 focus:outline-none"
+                        >
+                            <option value="all">Все счета</option>
+                            {accounts.map(acc => (
+                                <option key={acc.id} value={acc.id}>{acc.icon} {acc.name}</option>
+                            ))}
+                        </select>
+
+                        <select
+                            value={filterMonth}
+                            onChange={(e) => setFilterMonth(e.target.value)}
+                            className="px-3 py-2 border-2 border-gray-200 rounded-xl text-sm focus:border-blue-500 focus:outline-none"
+                        >
+                            <option value="current">Этот месяц</option>
+                            <option value="all">Всё время</option>
+                        </select>
+                    </div>
+
+                    {/* Список операций */}
+                    {Object.entries(groupedTransactions).map(([date, txs]) => (
+                        <div key={date} className="mb-6">
+                            <p className="text-sm font-semibold text-gray-500 mb-2">{date}</p>
+                            {txs.map(tx => {
+                                const cat = categories.find(c => c.id === tx.category);
+                                const subcat = cat?.subcategories?.find(s => s.id === tx.subcategory);
+                                const acc = accounts.find(a => a.id === tx.account);
+                                const toAcc = accounts.find(a => a.id === tx.toAccount);
+
+                                return (
+                                    <div key={tx.id} className="transaction-card">
+                                        <div className="flex items-start justify-between">
+                                            <div className="flex items-start gap-3 flex-1">
+                                                <div className="text-2xl">
+                                                    {tx.type === 'transfer' ? '🔄' : cat?.icon || '💰'}
+                                                </div>
+                                                <div className="flex-1">
+                                                    <p className="font-semibold text-gray-800">
+                                                        {tx.type === 'transfer' ? 
+                                                            `${acc?.name} → ${toAcc?.name}` :
+                                                            `${cat?.name}${subcat ? ` → ${subcat.name}` : ''}`
+                                                        }
+                                                    </p>
+                                                    {tx.note && <p className="text-sm text-gray-500 mt-1">"{tx.note}"</p>}
+                                                    <p className="text-xs text-gray-400 mt-1">
+                                                        {new Date(tx.timestamp).toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'})} • {acc?.name}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className={`font-bold text-lg ${tx.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                                                {tx.type === 'income' ? '+' : '-'}{tx.amount.toLocaleString()} ₸
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ))}
+
+                    {filteredTransactions.length === 0 && (
+                        <div className="text-center py-12 text-gray-400">
+                            <p className="text-4xl mb-2">📭</p>
+                            <p>Нет операций</p>
+                        </div>
+                    )}
+                </div>
+            );
+
+            const StatsTab = () => (
+                <div className="p-4 pb-32">
+                    <h2 className="text-2xl font-bold mb-4">Статистика</h2>
+                    
+                    <div className="stat-card mb-6">
+                        <h3 className="font-semibold text-gray-700 mb-4">
+                            {new Date().toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}
+                        </h3>
+                        
+                        <div className="space-y-3 mb-4">
+                            <div className="flex justify-between items-center py-2 border-b">
+                                <span className="text-gray-600">💰 Доходы</span>
+                                <span className="font-bold text-green-600 text-lg">+{calculations.monthIncome.toLocaleString()} ₸</span>
+                            </div>
+                            <div className="flex justify-between items-center py-2 border-b">
+                                <span className="text-gray-600">💸 Расходы</span>
+                                <span className="font-bold text-red-600 text-lg">-{calculations.monthExpenses.toLocaleString()} ₸</span>
+                            </div>
+                            <div className="flex justify-between items-center py-2">
+                                <span className="font-semibold text-gray-700">Баланс</span>
+                                <span className={`font-bold text-xl ${calculations.monthBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {calculations.monthBalance >= 0 ? '+' : ''}{calculations.monthBalance.toLocaleString()} ₸
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="stat-card">
+                        <h3 className="font-semibold text-gray-700 mb-4">Расходы по категориям</h3>
+                        
+                        {Object.entries(calculations.expensesByCategory).length > 0 ? (
+                            <div className="space-y-3">
+                                {Object.entries(calculations.expensesByCategory)
+                                    .sort((a, b) => b[1].amount - a[1].amount)
+                                    .map(([name, data]) => {
+                                        const percentage = ((data.amount / calculations.monthExpenses) * 100).toFixed(0);
+                                        return (
+                                            <div key={name}>
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <span className="text-sm text-gray-600">{data.icon} {name}</span>
+                                                    <span className="font-semibold">{data.amount.toLocaleString()} ₸ ({percentage}%)</span>
+                                                </div>
+                                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                                    <div 
+                                                        className="bg-gradient-to-r from-purple-500 to-blue-500 h-2 rounded-full"
+                                                        style={{width: `${percentage}%`}}
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                            </div>
+                        ) : (
+                            <p className="text-center text-gray-400 py-8">Нет данных за этот месяц</p>
+                        )}
+                    </div>
+                </div>
+            );
+
+            const SettingsTab = () => (
+                <div className="p-4 pb-32">
+                    <h2 className="text-2xl font-bold mb-4">Настройки</h2>
+
+                    <div className="space-y-3">
+                        <button className="w-full bg-white rounded-xl p-4 shadow-sm text-left flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <span className="text-2xl">📂</span>
+                                <span className="font-semibold">Управление категориями</span>
+                            </div>
+                            <span className="text-gray-400">→</span>
+                        </button>
+
+                        <button className="w-full bg-white rounded-xl p-4 shadow-sm text-left flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <span className="text-2xl">💳</span>
+                                <span className="font-semibold">Управление счетами</span>
+                            </div>
+                            <span className="text-gray-400">→</span>
+                        </button>
+
+                        <button 
+                            onClick={() => {
+                                if (confirm('Вы уверены? Все данные будут удалены!')) {
+                                    setAccounts(INITIAL_ACCOUNTS);
+                                    setTransactions([]);
+                                    setCategories(INITIAL_CATEGORIES);
+                                }
+                            }}
+                            className="w-full bg-white rounded-xl p-4 shadow-sm text-left flex items-center justify-between border-2 border-red-200"
+                        >
+                            <div className="flex items-center gap-3">
+                                <span className="text-2xl">🗑️</span>
+                                <span className="font-semibold text-red-600">Сбросить все данные</span>
+                            </div>
+                        </button>
+                    </div>
+
+                    <div className="mt-8 text-center text-sm text-gray-400">
+                        <p>💰 Мои Финансы v1.0</p>
+                        <p className="mt-1">Все данные хранятся локально в вашем телефоне</p>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    {/* Шапка */}
+                    <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white sticky top-0 z-10 shadow-lg">
+                        <h1 className="text-2xl font-bold text-center pt-4 px-4">💰 Мои Финансы</h1>
+                        <p className="text-center text-sm opacity-90 pb-3">Учёт доходов и расходов</p>
+                        
+                        {/* Табы */}
+                        <div className="flex bg-blue-700 text-white">
+                            <button
+                                onClick={() => setActiveTab('home')}
+                                className={`tab-button ${activeTab === 'home' ? 'active bg-gray-50' : ''}`}
+                            >
+                                🏠 Главная
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('history')}
+                                className={`tab-button ${activeTab === 'history' ? 'active bg-gray-50' : ''}`}
+                            >
+                                📜 История
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('stats')}
+                                className={`tab-button ${activeTab === 'stats' ? 'active bg-gray-50' : ''}`}
+                            >
+                                📊 Статистика
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('settings')}
+                                className={`tab-button ${activeTab === 'settings' ? 'active bg-gray-50' : ''}`}
+                            >
+                                ⚙️ Настройки
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Контент */}
+                    {activeTab === 'home' && <HomeTab />}
+                    {activeTab === 'history' && <HistoryTab />}
+                    {activeTab === 'stats' && <StatsTab />}
+                    {activeTab === 'settings' && <SettingsTab />}
+
+                    {/* Модальные окна */}
+                    {showAddTransaction && <TransactionModal />}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
